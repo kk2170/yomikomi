@@ -1,11 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import type {
+  DiscoveredFeed,
   FeedArticle,
   FeedResult,
   FeedSubscription,
   SavedArticle,
   SavedArticleSummary,
 } from '../shared/types';
+import { normalizeHttpUrl } from '../shared/article-utils';
 
 type FeedState = {
   loading: boolean;
@@ -54,6 +56,7 @@ function App() {
   );
   const [feeds, setFeeds] = useState<FeedSubscription[]>([]);
   const [feedUrl, setFeedUrl] = useState('');
+  const [articleUrl, setArticleUrl] = useState('');
   const [selectedFeedId, setSelectedFeedId] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState('ローカルで読むための記事基地を育てよう。');
   const [submitting, setSubmitting] = useState(false);
@@ -64,6 +67,8 @@ function App() {
   const [selectedSavedArticleId, setSelectedSavedArticleId] = useState<string>('');
   const [savingUrl, setSavingUrl] = useState<string>('');
   const [exportingDatabase, setExportingDatabase] = useState(false);
+  const [discoveringFeeds, setDiscoveringFeeds] = useState(false);
+  const [discoveredFeeds, setDiscoveredFeeds] = useState<DiscoveredFeed[]>([]);
 
   const selectedFeed = useMemo(
     () => feeds.find((feed) => feed.id === selectedFeedId) ?? feeds[0],
@@ -201,10 +206,13 @@ function App() {
     setStatusMessage('フィードを登録しています...');
 
     try {
-      const added = await window.yomikomi.addFeed(feedUrl);
+      const normalizedUrl = normalizeHttpUrl(feedUrl);
+      setFeedUrl(normalizedUrl);
+      const added = await window.yomikomi.addFeed(normalizedUrl);
       setFeeds((current) => [...current, added]);
       setSelectedFeedId(added.id);
       setFeedUrl('');
+      setDiscoveredFeeds([]);
       setViewMode('feeds');
       await refreshFeed(added.id);
       setStatusMessage(`「${added.title}」を登録しました。ここから読み込みを始めます。`);
@@ -213,6 +221,32 @@ function App() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleDiscoverFeeds = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setDiscoveringFeeds(true);
+    setStatusMessage('記事URLからRSS/Atomフィード候補を探しています...');
+
+    try {
+      const normalizedArticleUrl = normalizeHttpUrl(articleUrl);
+      setArticleUrl(normalizedArticleUrl);
+      const discovered = await window.yomikomi.discoverFeeds(normalizedArticleUrl);
+      setDiscoveredFeeds(discovered);
+      setStatusMessage(`候補を${discovered.length}件見つけました。登録したいフィードを選んでください。`);
+    } catch (error) {
+      setDiscoveredFeeds([]);
+      setStatusMessage(
+        error instanceof Error ? error.message : '記事URLからのフィード探索に失敗しました。',
+      );
+    } finally {
+      setDiscoveringFeeds(false);
+    }
+  };
+
+  const handleUseDiscoveredFeed = (candidate: DiscoveredFeed) => {
+    setFeedUrl(candidate.url);
+    setStatusMessage(`候補「${candidate.title}」を登録フォームへ入れました。内容を確認して登録できます。`);
   };
 
   const handleRemoveFeed = async (feedId: string) => {
@@ -332,7 +366,7 @@ function App() {
           <label htmlFor="feedUrl">RSS / Atom URL</label>
           <input
             id="feedUrl"
-            type="url"
+            type="text"
             placeholder="https://example.com/feed.xml"
             value={feedUrl}
             onChange={(event) => setFeedUrl(event.target.value)}
@@ -584,7 +618,90 @@ function App() {
               </section>
             </>
           ) : (
-            <div className="empty-card large">左側から RSS フィードを登録してください。</div>
+            <section className="registration-screen">
+              <div className="registration-hero">
+                <span className="pill">RSS登録画面</span>
+                <h3>まずは読みたいサイトのフィードを登録しましょう</h3>
+                <p>
+                  RSS / Atom の URL を入力すると、YomiKomi に購読先を追加できます。追加後は最新記事をまとめて読み、気になった記事をローカル保存できます。
+                </p>
+              </div>
+
+              <form className="feed-form registration-form" onSubmit={handleAddFeed}>
+                <label htmlFor="feedUrlMain">RSS / Atom URL</label>
+                <input
+                  id="feedUrlMain"
+                  type="text"
+                  placeholder="https://example.com/feed.xml"
+                  value={feedUrl}
+                  onChange={(event) => setFeedUrl(event.target.value)}
+                  required
+                />
+                <button type="submit" disabled={submitting}>
+                  {submitting ? '登録中...' : 'このフィードを登録'}
+                </button>
+              </form>
+
+              <form className="feed-form registration-form" onSubmit={handleDiscoverFeeds}>
+                <label htmlFor="articleUrlMain">記事URLからRSSを探す</label>
+                <input
+                  id="articleUrlMain"
+                  type="text"
+                  placeholder="https://example.com/articles/interesting-post"
+                  value={articleUrl}
+                  onChange={(event) => setArticleUrl(event.target.value)}
+                  required
+                />
+                <button type="submit" className="secondary" disabled={discoveringFeeds}>
+                  {discoveringFeeds ? '探索中...' : 'この記事からRSS候補を探す'}
+                </button>
+              </form>
+
+              {discoveredFeeds.length > 0 && (
+                <div className="empty-card registration-card discovered-feed-list">
+                  <h4>見つかったRSS/Atom候補</h4>
+                  <div className="discovered-feed-items">
+                    {discoveredFeeds.map((candidate) => (
+                      <div key={candidate.url} className="discovered-feed-item">
+                        <div>
+                          <strong>{candidate.title}</strong>
+                          <p>{candidate.url}</p>
+                          <span className="candidate-source">
+                            {candidate.source === 'page-link'
+                              ? 'ページ内のフィードリンクから発見'
+                              : '定番パス探索から発見'}
+                          </span>
+                        </div>
+                        <button type="button" onClick={() => handleUseDiscoveredFeed(candidate)}>
+                          この候補を使う
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="registration-grid">
+                <div className="empty-card registration-card">
+                  <h4>登録するとできること</h4>
+                  <ul>
+                    <li>最新記事を一覧で読む</li>
+                    <li>記事全文をローカルへ保存する</li>
+                    <li>SQLite データベースを書き出す</li>
+                  </ul>
+                </div>
+
+                <div className="empty-card registration-card">
+                  <h4>URL入力のヒント</h4>
+                  <ul>
+                    <li>https://example.com/feed.xml</li>
+                    <li>https://example.com/rss</li>
+                    <li>https://example.com/atom.xml</li>
+                    <li>example.com/feed.xml のようにスキームなしでも入力できます</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
           )
         ) : selectedSavedArticle ? (
           <section className="reader-shell">

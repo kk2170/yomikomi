@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildArticleSummary,
   buildDatabaseExportFileName,
+  normalizeHttpUrl,
   stripHtmlToText,
 } from './article-utils';
 
@@ -36,6 +37,19 @@ describe('SQLiteエクスポート名の生成', () => {
   it('日付入りのファイル名を作る', () => {
     expect(buildDatabaseExportFileName('2026-04-29T12:34:56.000Z')).toBe(
       'yomikomi-2026-04-29.sqlite3',
+    );
+  });
+});
+
+describe('URLの正規化', () => {
+  it('スキームがないURLにhttpsを補う', () => {
+    // RSS登録画面では入力の手間を減らしたい。
+    expect(normalizeHttpUrl('example.com/feed.xml')).toBe('https://example.com/feed.xml');
+  });
+
+  it('http/https以外は弾く', () => {
+    expect(() => normalizeHttpUrl('ftp://example.com/feed.xml')).toThrow(
+      'http または https のURLを入力してください。',
     );
   });
 });

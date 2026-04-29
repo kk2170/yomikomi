@@ -25,3 +25,19 @@ export const buildArticleSummary = (options: {
 
 export const buildDatabaseExportFileName = (isoDate: string) =>
   `yomikomi-${isoDate.slice(0, 10)}.sqlite3`;
+
+export const normalizeHttpUrl = (input: string) => {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    throw new Error('URLを入力してください。');
+  }
+
+  const withScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const url = new URL(withScheme);
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('http または https のURLを入力してください。');
+  }
+
+  return url.toString();
+};

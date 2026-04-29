@@ -27,7 +27,19 @@
   --reader-quote: rgba(96, 165, 250, 0.45);
   --error: #fda4af;
   color-scheme: dark;
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family:
+    'Noto Sans JP',
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Yu Gothic UI',
+    'Yu Gothic',
+    Meiryo,
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   line-height: 1.5;
   font-weight: 400;
   background: var(--bg-base);
@@ -292,6 +304,77 @@ a {
   gap: 1rem;
 }
 
+.registration-screen,
+.registration-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.registration-hero,
+.registration-card {
+  padding: 1.25rem;
+}
+
+.registration-hero {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 1rem;
+}
+
+.registration-hero h3,
+.registration-card h4 {
+  margin: 0 0 0.75rem;
+}
+
+.registration-hero p,
+.registration-card ul {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.discovered-feed-items {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.discovered-feed-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.9rem;
+  background: var(--panel-strong-bg);
+}
+
+.discovered-feed-item p {
+  margin: 0.3rem 0;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.candidate-source {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.registration-form {
+  max-width: 680px;
+}
+
+.registration-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.registration-card ul {
+  padding-left: 1.2rem;
+}
+
+.registration-card li + li {
+  margin-top: 0.45rem;
+}
+
 .feed-card,
 .article-card,
 .empty-card,
@@ -436,5 +519,14 @@ a {
   .stack-on-mobile {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .registration-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .discovered-feed-item {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

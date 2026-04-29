@@ -7,6 +7,7 @@ import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import sanitizeHtml from 'sanitize-html';
 import type {
+  DiscoveredFeed,
   FeedArticle,
   FeedResult,
   FeedSubscription,
@@ -17,6 +18,7 @@ import type {
 import {
   buildArticleSummary,
   buildDatabaseExportFileName,
+  normalizeHttpUrl,
   stripHtmlToText,
 } from '../shared/article-utils';
 
@@ -25,6 +27,27 @@ const parser = new Parser();
 let database: DatabaseSync | null = null;
 
 const getDatabasePath = () => path.join(app.getPath('userData'), 'yomikomi.db');
+
+const parseRequiredHttpUrl = (input: string, label: string) => {
+  if (!input.trim()) {
+    throw new Error(`${label}を入力してください。`);
+  }
+
+  try {
+    return normalizeHttpUrl(input);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'http または https のURLを入力してください。') {
+      const wrappedError = new Error(`${label}は http または https のURLを入力してください。`);
+      (wrappedError as Error & { cause?: unknown }).cause = error;
+      throw wrappedError;
+    }
+
+    throw error;
+  }
+};
+
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-gpu');
 
 const getDatabase = () => {
   if (database) {
@@ -103,6 +126,83 @@ const fetchText = async (url: string) => {
   }
 
   return response.text();
+};
+
+const tryParseFeed = async (feedUrl: string) => {
+  try {
+    const xml = await fetchText(feedUrl);
+    const parsed = await parser.parseString(xml);
+
+    return {
+      title: parsed.title?.trim() || feedUrl,
+      url: feedUrl,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const discoverFeedsFromArticleUrl = async (articleUrl: string): Promise<DiscoveredFeed[]> => {
+  const normalizedArticleUrl = parseRequiredHttpUrl(articleUrl, '記事URL');
+  const html = await fetchText(normalizedArticleUrl);
+  const dom = new JSDOM(html, { url: normalizedArticleUrl });
+  const document = dom.window.document;
+  const seen = new Set<string>();
+  const discovered: DiscoveredFeed[] = [];
+
+  const registerFeed = async (candidateUrl: string, source: DiscoveredFeed['source'], title?: string) => {
+    let normalizedCandidateUrl: string;
+
+    try {
+      normalizedCandidateUrl = normalizeHttpUrl(candidateUrl);
+    } catch {
+      return;
+    }
+
+    if (seen.has(normalizedCandidateUrl)) {
+      return;
+    }
+
+    const parsedFeed = await tryParseFeed(normalizedCandidateUrl);
+    if (!parsedFeed) {
+      return;
+    }
+
+    seen.add(normalizedCandidateUrl);
+    discovered.push({
+      title: title?.trim() || parsedFeed.title,
+      url: normalizedCandidateUrl,
+      source,
+    });
+  };
+
+  const alternateLinks = Array.from(
+    document.querySelectorAll<HTMLLinkElement>('link[rel~="alternate"][href]'),
+  );
+
+  for (const link of alternateLinks) {
+    const type = link.type?.toLowerCase() ?? '';
+    const href = link.getAttribute('href');
+
+    if (!href || !['application/rss+xml', 'application/atom+xml', 'application/rdf+xml'].includes(type)) {
+      continue;
+    }
+
+    await registerFeed(new URL(href, normalizedArticleUrl).toString(), 'page-link', link.title);
+  }
+
+  const commonFeedPaths = ['/feed', '/feed.xml', '/rss', '/rss.xml', '/atom.xml', '/index.xml'];
+  const origin = new URL(normalizedArticleUrl).origin;
+
+  for (const feedPath of commonFeedPaths) {
+    await registerFeed(new URL(feedPath, origin).toString(), 'common-path');
+  }
+
+  if (discovered.length === 0) {
+    throw new Error('記事URLからRSS/Atomフィード候補を見つけられませんでした。');
+  }
+
+  return discovered.slice(0, 5);
 };
 
 const mapFeedRow = (row: Record<string, unknown>): FeedSubscription => ({
@@ -228,10 +328,7 @@ const getSavedArticle = (articleId: string): SavedArticle => {
 };
 
 const saveArticle = async (input: SaveArticleInput): Promise<SavedArticle> => {
-  const sourceUrl = input.sourceUrl.trim();
-  if (!sourceUrl) {
-    throw new Error('記事URLが必要です。');
-  }
+  const sourceUrl = parseRequiredHttpUrl(input.sourceUrl, '記事URL');
 
   const existing = getDatabase()
     .prepare('SELECT id FROM saved_articles WHERE source_url = ?')
@@ -354,10 +451,7 @@ const createWindow = async () => {
 ipcMain.handle('feeds:list', async () => listSubscriptions());
 
 ipcMain.handle('feeds:add', async (_event, url: string) => {
-  const normalizedUrl = url.trim();
-  if (!normalizedUrl) {
-    throw new Error('RSS フィード URL を入力してください。');
-  }
+  const normalizedUrl = parseRequiredHttpUrl(url, 'RSS フィード URL');
 
   const subscriptions = listSubscriptions();
   if (subscriptions.some((feed) => feed.url === normalizedUrl)) {
@@ -376,6 +470,10 @@ ipcMain.handle('feeds:add', async (_event, url: string) => {
 
   return result.subscription;
 });
+
+ipcMain.handle('feeds:discover', async (_event, articleUrl: string) =>
+  discoverFeedsFromArticleUrl(articleUrl),
+);
 
 ipcMain.handle('feeds:remove', async (_event, feedId: string) => {
   getDatabase().prepare('DELETE FROM feeds WHERE id = ?').run(feedId);

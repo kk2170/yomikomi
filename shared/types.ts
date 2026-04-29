@@ -49,9 +49,16 @@ export type FeedResult = {
   articles: FeedArticle[];
 };
 
+export type DiscoveredFeed = {
+  title: string;
+  url: string;
+  source: 'page-link' | 'common-path';
+};
+
 export type YomiKomiApi = {
   listFeeds: () => Promise<FeedSubscription[]>;
   addFeed: (url: string) => Promise<FeedSubscription>;
+  discoverFeeds: (articleUrl: string) => Promise<DiscoveredFeed[]>;
   removeFeed: (feedId: string) => Promise<void>;
   refreshFeed: (feedId: string) => Promise<FeedResult>;
   listSavedArticles: () => Promise<SavedArticleSummary[]>;
