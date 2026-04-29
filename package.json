@@ -1,0 +1,89 @@
+{
+  "name": "yomikomi",
+  "version": "1.0.0",
+  "description": "ローカルで使う RSS リーダーアプリ",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron:tsc\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron:tsc": "tsc -p tsconfig.electron.json --watch",
+    "dev:electron": "wait-on tcp:5173 dist-electron/electron/main.js && electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "npm run typecheck && tsc -p tsconfig.electron.json && vite build",
+    "preview": "vite preview",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:linux": "npm run build && electron-builder --linux AppImage tar.gz",
+    "dist:win": "npm run build && electron-builder --win portable zip",
+    "dist:mac": "npm run build && electron-builder --mac zip"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "productName": "YomiKomi",
+  "type": "commonjs",
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "jsdom": "^29.1.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "rss-parser": "^3.13.0",
+    "sanitize-html": "^2.17.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jsdom": "^28.0.1",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/sanitize-html": "^2.16.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.1",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5",
+    "wait-on": "^9.0.5"
+  },
+  "build": {
+    "appId": "com.kk2170.yomikomi",
+    "productName": "YomiKomi",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.news",
+      "target": [
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "portable",
+        "zip"
+      ]
+    },
+    "linux": {
+      "category": "News",
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ]
+    }
+  }
+}
